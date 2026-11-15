@@ -1,0 +1,960 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Smart Farming AI</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600&family=Unbounded:wght@500;600&display=swap">
+<style>
+:root{--ink:#12302f;--muted:#5d7270;--line:#d3ddda;--bg:#f3f6f5;--wheat:#c99a2e;--ok:#3f8f4f;--warn:#e0a82e;--bad:#c8432f;--wet:#3b7fc4}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{font:15px/1.5 Onest,system-ui,sans-serif;color:var(--ink);background:var(--bg)}
+.app{display:grid;grid-template-columns:1fr 450px;height:100%}
+#map{height:100%;min-height:320px}
+aside{overflow-y:auto;padding:22px 24px 40px;background:#fff;border-left:1px solid var(--line)}
+h1{font:600 20px/1.2 Unbounded,Onest,sans-serif;margin:0 0 6px}
+h2{font:500 14px/1.3 Unbounded,Onest,sans-serif;margin:0 0 12px}
+.sub{color:var(--muted);margin:0 0 10px}
+.badges{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px}
+.badges span{font-size:12px;padding:2px 9px;border-radius:99px;background:var(--bg);color:var(--muted)}
+.badges span.on{background:#dcefe0;color:#1f5c2c}
+section{border-top:1px solid var(--line);padding:18px 0}
+label{display:block;font-size:13px;color:var(--muted);margin:10px 0 3px}
+input,select{width:100%;font:inherit;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--ink)}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+button{font:600 15px Onest,sans-serif;width:100%;margin-top:14px;padding:11px;border:0;border-radius:8px;background:var(--ink);color:#fff;cursor:pointer}
+button:disabled{opacity:.6;cursor:wait}
+:focus-visible{outline:3px solid var(--wheat);outline-offset:2px}
+.big{font:600 34px/1.1 Unbounded,Onest,sans-serif;margin:2px 0 6px}
+.msg{margin:0 0 14px}
+.gauge{position:relative;height:14px;margin:18px 0 4px}
+.zones{display:flex;height:100%;border-radius:7px;overflow:hidden}
+.zones i{display:block}
+.mark{position:absolute;top:-6px;width:4px;height:26px;margin-left:-2px;background:var(--ink);border-radius:2px;box-shadow:0 0 0 2px #fff}
+.scale{display:flex;justify-content:space-between;font-size:12px;color:var(--muted)}
+dl{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;margin:0}
+dt{color:var(--muted)}dd{margin:0;text-align:right}
+.crop{display:grid;grid-template-columns:96px 1fr 34px;gap:8px;align-items:center;margin:8px 0}
+.crop .bar{height:8px;border-radius:4px;background:var(--bg);overflow:hidden}
+.crop .bar b{display:block;height:100%;background:var(--ok)}
+.hint{font-size:13px;color:var(--muted);margin:2px 0 0}
+.note{background:#fbf3dc;border-radius:8px;padding:8px 12px;margin:10px 0 0;font-size:14px}
+.err{background:#f9e2dd;color:#7a2417;border-radius:8px;padding:8px 12px;margin-top:12px;font-size:14px}
+.det{display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--bg)}
+.tag{color:var(--bad);font-weight:600}
+img.res{width:100%;border-radius:8px;margin-top:10px}
+.hero{font:600 40px/1.1 Unbounded,Onest,sans-serif;color:var(--ok);margin:14px 0 2px}
+.bars{margin:16px 0}.bars div{margin:8px 0}.bars span{display:flex;justify-content:space-between;font-size:13px;color:var(--muted);margin-bottom:3px}
+.bars i{display:block;height:12px;border-radius:6px;background:#b9c8c3}.bars .after i{background:var(--ok)}
+.tiles{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:14px 0}
+.tiles div{background:var(--bg);border-radius:10px;padding:10px 12px}.tiles small{display:block;color:var(--muted);font-size:12px}.tiles b{font-weight:600}
+table.macro{width:100%;border-collapse:collapse;font-size:14px;margin-top:6px}.macro th{text-align:left;font-weight:500;color:var(--muted);padding:4px 0}.macro td{padding:6px 0;border-top:1px solid var(--line)}.macro td:last-child,.macro th:last-child{text-align:right}
+.hidden{display:none}
+body.ai-lock{overflow:hidden}
+.ai-open-side{width:100%;margin:10px 0 0;padding:9px 12px;border:1px solid #cfe0d3;border-radius:9px;background:#f3f9f4;color:#1f5c2c;font:600 13px Onest,sans-serif;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px}
+.ai-open-side:hover{background:#e8f3ea;border-color:#9ac7a3}
+@media(max-width:820px){.app{grid-template-columns:1fr;grid-template-rows:46vh 1fr}aside{border-left:0}}
+</style>
+</head>
+<body>
+<div class="app">
+<div id="map"></div>
+<aside>
+  <h1>Smart Farming AI</h1>
+  <p class="sub">Влажность почвы по данным NASA, советы по поливу и севообороту, диагностика листа.</p>
+  <div class="badges" id="badges"></div>
+  <button id="ai-open-side" class="ai-open-side" type="button" aria-haspopup="dialog" aria-controls="ai-overlay">💬 Спросить Агро Ассистента</button>
+
+  <section>
+    <h2>Где ваше поле</h2>
+    <label for="q">Найти место</label>
+    <input id="q" placeholder="Город или адрес, затем Enter">
+    <div class="row">
+      <div><label for="lat">Широта</label><input id="lat" type="number" step="any" value="43.24"></div>
+      <div><label for="lon">Долгота</label><input id="lon" type="number" step="any" value="76.89"></div>
+    </div>
+    <div class="row">
+      <div><label for="crop">Культура сейчас</label><select id="crop"></select></div>
+      <div><label for="soil">Тип почвы</label>
+        <select id="soil"><option value="">Определить сам</option><option value="sandy">Песок</option><option value="loamy_sand">Связный песок</option><option value="sandy_loam">Супесь</option><option value="loam">Суглинок</option><option value="silt_loam">Пылеватый суглинок</option><option value="silt">Пылеватая</option><option value="sandy_clay_loam">Песчано-глинистый суглинок</option><option value="clay_loam">Глинистый суглинок</option><option value="silty_clay_loam">Пылевато-глинистый суглинок</option><option value="sandy_clay">Песчанистая глина</option><option value="silty_clay">Пылеватая глина</option><option value="clay">Глина</option></select></div>
+    </div>
+    <p class="hint">Можно кликнуть по карте, чтобы выбрать точку.</p>
+    <button id="go">Анализировать поле</button>
+    <div id="err" class="err hidden"></div>
+  </section>
+
+  <section id="irr" class="hidden">
+    <h2>Нужен ли полив</h2>
+    <div class="big" id="irrBig"></div>
+    <p class="msg" id="irrMsg"></p>
+    <div class="gauge"><div class="zones">
+      <i style="flex:.3;background:var(--bad)"></i><i style="flex:.2;background:var(--warn)"></i><i style="flex:.6;background:var(--ok)"></i><i style="flex:.1;background:var(--wet)"></i></div>
+      <b class="mark" id="mark"></b></div>
+    <div class="scale"><span>почва пересохла</span><span>переувлажнена</span></div>
+    <div id="notes"></div>
+  </section>
+
+  <section id="data" class="hidden">
+    <h2>Данные по точке</h2>
+    <dl id="dl"></dl>
+  </section>
+
+  <section id="plan" class="hidden">
+    <h2>Что сажать следующим сезоном</h2>
+    <div id="crops"></div>
+    <p class="hint" id="planSrc"></p>
+  </section>
+
+  <section>
+    <h2>Фото листа</h2>
+    <input id="photo" type="file" accept="image/*">
+    <label><input type="checkbox" id="lowconf" style="width:auto"> Показать и неуверенные результаты (менее надёжно)</label>
+    <button id="det">Распознать болезнь</button>
+    <div id="detOut"></div>
+  </section>
+
+  <section>
+    <h2>Дрон, камера, видео</h2>
+    <p class="hint">Снимки JPEG/PNG с дрона или смартфона (можно несколько) либо одно видео. Координаты берутся из метаданных снимка.</p>
+    <label for="dmodel">Модель</label>
+    <select id="dmodel"><option value="disease">Болезни листьев</option><option value="seg">Сегментация (новая, пока слабая)</option></select>
+    <label><input type="checkbox" id="tile" checked style="width:auto"> Крупный снимок: искать мелкие объекты по частям</label>
+    <input id="dfiles" type="file" accept="image/jpeg,image/png,video/*" multiple style="margin-top:10px">
+    <button id="dgo">Обработать</button>
+    <div id="dOut"></div>
+  </section>
+
+  <section>
+    <h2>Калькулятор урожая</h2>
+    <p class="hint">Сколько урожая сохраняет система: потери без неё (L1) против потерь с ней (L2 = 5%).</p>
+    <div class="row">
+      <div><label for="ycrop">Культура</label><select id="ycrop"></select></div>
+      <div><label for="area">Площадь, га</label><input id="area" type="number" min="0" step="any" value="10"></div>
+    </div>
+    <div class="row">
+      <div><label for="ycur">Урожайность сейчас, т/га</label><input id="ycur" type="number" min="0" step="any"></div>
+      <div><label for="yl1">Потери без системы, %</label><input id="yl1" type="number" min="0" max="99" step="any"></div>
+    </div>
+    <label for="price">Цена, ₸ за тонну (необязательно)</label>
+    <input id="price" type="number" min="0" step="any" placeholder="чтобы увидеть выгоду в деньгах">
+    <button id="calc">Рассчитать</button>
+    <div id="yOut"></div>
+  </section>
+</aside>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+<script>
+const $=s=>document.querySelector(s);
+const esc=t=>String(t??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const COL={green:'#3f8f4f',yellow:'#e0a82e',red:'#c8432f',blue:'#3b7fc4'};
+const CROP={wheat:'Пшеница',barley:'Ячмень',corn:'Кукуруза',sorghum:'Сорго',millet:'Просо',chickpea:'Нут',soybean:'Соя',sunflower:'Подсолнечник',potato:'Картофель',alfalfa:'Люцерна',lentil:'Чечевица',rice:'Рис',sugar_beet:'Сахарная свёкла',beetroot:'Свёкла',cotton:'Хлопок',rapeseed:'Рапс',tomato:'Томаты',pepper:'Перец',eggplant:'Баклажан',cucumber:'Огурцы',pumpkin:'Тыква',watermelon:'Арбуз',melon:'Дыня',cabbage:'Капуста',carrot:'Морковь',onion:'Лук',garlic:'Чеснок'};
+const TEX={sandy:'песок',loamy_sand:'связный песок',sandy_loam:'супесь',loam:'суглинок',silt_loam:'пылеватый суглинок',silt:'пылеватая',sandy_clay_loam:'песчано-глинистый суглинок',clay_loam:'глинистый суглинок',silty_clay_loam:'пылевато-глинистый суглинок',sandy_clay:'песчанистая глина',silty_clay:'пылеватая глина',clay:'глина'};
+let map,pin;
+
+async function api(url,opts){
+  const r=await fetch(url,opts); let j=null; try{j=await r.json()}catch(e){}
+  if(!r.ok){const d=j&&j.detail; throw new Error(typeof d==='string'?d:d?JSON.stringify(d):'Ошибка сервера '+r.status)}
+  return j;
+}
+function fail(e){const b=$('#err');b.textContent=e.message;b.classList.remove('hidden')}
+function busy(id,on,txt){const b=$(id);if(on){b.dataset.t=b.textContent;b.textContent=txt;b.disabled=true}else{b.textContent=b.dataset.t;b.disabled=false}}
+
+function setPoint(lat,lon,color){
+  $('#lat').value=(+lat).toFixed(4);$('#lon').value=(+lon).toFixed(4);
+  if(pin)map.removeLayer(pin);
+  pin=L.circleMarker([lat,lon],{radius:11,color:'#fff',weight:3,fillColor:color||'#12302f',fillOpacity:1}).addTo(map);
+}
+function initMap(){
+  map=L.map('map').setView([43.24,76.89],9);
+  const sat=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{attribution:'Esri World Imagery',maxZoom:18});
+  const osm=L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap',maxZoom:18});
+  sat.addTo(map);L.control.layers({'Спутник':sat,'Схема':osm}).addTo(map);
+  map.on('click',e=>setPoint(e.latlng.lat,e.latlng.lng));
+  setPoint(43.24,76.89);
+  ['#lat','#lon'].forEach(i=>$(i).addEventListener('change',()=>{const a=+$('#lat').value,o=+$('#lon').value;setPoint(a,o);map.setView([a,o])}));
+  $('#q').addEventListener('keydown',async e=>{
+    if(e.key!=='Enter')return;
+    try{const r=await (await fetch('https://nominatim.openstreetmap.org/search?format=json&limit=1&q='+encodeURIComponent(e.target.value))).json();
+      if(!r.length)throw new Error('Место не найдено. Попробуйте уточнить название.');
+      setPoint(+r[0].lat,+r[0].lon);map.setView([+r[0].lat,+r[0].lon],11)}catch(x){fail(x)}
+  });
+}
+
+async function analyze(){
+  $('#err').classList.add('hidden');
+  const lat=$('#lat').value,lon=$('#lon').value;
+  busy('#go',true,'Запрашиваем NASA…');
+  try{
+    const q=new URLSearchParams({lat,lon,crop_type:$('#crop').value});
+    if($('#soil').value)q.set('soil_texture',$('#soil').value);
+    render(await api('/api/v1/field-analytics?'+q));
+  }catch(e){fail(e)}finally{busy('#go',false)}
+}
+function render(d){
+  const i=d.irrigation_advice,c=d.current_status,f=d.future_strategy;
+  setPoint(+$('#lat').value,+$('#lon').value,COL[i.color]);
+  $('#irrBig').textContent=i.recommended_water_mm>0?i.recommended_water_mm+' мм':'Полив не нужен';
+  $('#irrBig').style.color=COL[i.color];
+  $('#irrMsg').textContent=i.message;
+  $('#mark').style.left=Math.max(0,Math.min(i.relative_moisture,1.2))/1.2*100+'%';
+  $('#notes').innerHTML=(d.notes||[]).map(n=>'<div class="note">'+esc(n)+'</div>').join('');
+  const s=c.soil;
+  $('#dl').innerHTML=[
+    ['Корневая зона, 0–100 см',c.root_moisture_m3m3.toFixed(3)+' м³/м³'],
+    ['Поверхность',c.surface_moisture_m3m3==null?'нет данных':(+c.surface_moisture_m3m3).toFixed(3)+' м³/м³'],
+    ['Осадки за 48 ч',c.rain_next_48h_mm+' мм'],
+    ['Почва',(TEX[s.texture]||s.texture)+(s.assumed?' (предположение)':'')],
+    ['Источник влажности',c.root_moisture_source]
+  ].map(r=>'<dt>'+r[0]+'</dt><dd>'+esc(r[1])+'</dd>').join('');
+  $('#crops').innerHTML=f.recommended_next_crops.map(k=>
+    '<div class="crop" title="'+esc(k.reason)+'"><span>'+esc(CROP[k.crop]||k.crop)+'</span><span class="bar"><b style="width:'+k.score+'%"></b></span><span>'+k.score+'</span></div>').join('')||'<p class="hint">'+esc(f.note||'Нет данных')+'</p>';
+  $('#planSrc').textContent='История влажности: '+f.history_source+'. Наведите на культуру, чтобы увидеть причину.';
+  ['#irr','#data','#plan'].forEach(x=>$(x).classList.remove('hidden'));
+}
+
+async function detect(){
+  const out=$('#detOut'),file=$('#photo').files[0];
+  if(!file){out.innerHTML='<div class="err">Выберите фото листа.</div>';return}
+  const fd=new FormData();
+  fd.append('file',file);fd.append('lat',$('#lat').value);fd.append('lon',$('#lon').value);
+  fd.append('crop_type',$('#crop').value);fd.append('annotate','true');if($('#lowconf').checked)fd.append('conf','0.1');
+  busy('#det',true,'Распознаём…');
+  try{
+    const d=await api('/api/v1/detect',{method:'POST',body:fd});
+    let h='';
+    if(d.diagnosis)h+='<div class="note">'+esc(d.diagnosis.text)+'</div>';
+    h+=d.detections.length?d.detections.slice(0,6).map(x=>'<div class="det"><span>'+esc(x.class_ru||x.class)+(x.disease?' <span class="tag">болезнь</span>':'')+'</span><span>'+Math.round(x.confidence*100)+'%</span></div>').join(''):'<p class="hint">Ничего не распознано. Возможно, модель не знает эту культуру. Если знает, снимите лист ближе и при хорошем освещении.</p>';
+    if(d.annotated_jpeg_base64)h+='<img class="res" alt="Результат распознавания" src="data:image/jpeg;base64,'+d.annotated_jpeg_base64+'">';
+    out.innerHTML=h;
+  }catch(e){out.innerHTML='<div class="err">'+esc(e.message)+'</div>'}finally{busy('#det',false)}
+}
+
+
+async function drone(){
+  const out=$('#dOut'),fs=[...$('#dfiles').files];
+  if(!fs.length){out.innerHTML='<div class="err">Выберите снимки или видео.</div>';return}
+  const vid=fs.find(f=>f.type.startsWith('video')||/\.(mp4|mov|avi|mkv|webm|m4v)$/i.test(f.name));
+  const fd=new FormData();fd.append('model',$('#dmodel').value);
+  busy('#dgo',true,'Загружаем…');
+  try{
+    if(vid){
+      fd.append('file',vid);
+      const j=await api('/api/v1/detect/video',{method:'POST',body:fd});
+      for(;;){
+        const s=await api('/api/v1/jobs/'+j.job_id);
+        if(s.state==='error')throw new Error(s.error);
+        if(s.state==='done'){showVideo(s.result);break}
+        out.innerHTML='<p class="hint">Обработка видео: '+Math.round((s.progress||0)*100)+'%. Это может занять несколько минут.</p>';
+        await new Promise(r=>setTimeout(r,3000));
+      }
+    }else{
+      fs.slice(0,50).forEach(f=>fd.append('files',f));fd.append('tile',$('#tile').checked);
+      showBatch(await api('/api/v1/detect/batch',{method:'POST',body:fd}));
+    }
+  }catch(e){out.innerHTML='<div class="err">'+esc(e.message)+'</div>'}finally{busy('#dgo',false)}
+}
+function showVideo(r){
+  let h='<dl style="margin-top:14px">'+[['Длительность',r.duration_s+' с'],['Кадров проанализировано',r.frames_analyzed],
+    ['Уникальных объектов',r.unique_objects==null?'—':r.unique_objects],['В среднем на кадр',r.avg_per_frame],['Максимум на кадре',r.max_per_frame]]
+    .map(x=>'<dt>'+x[0]+'</dt><dd>'+esc(x[1])+'</dd>').join('')+'</dl>';
+  if(r.warning)h+='<div class="note">'+esc(r.warning)+'</div>';
+  h+=(r.keyframes||[]).map(k=>'<p class="hint">Кадр на '+k.t+' с: объектов '+k.count+'</p><img class="res" alt="Кадр с разметкой" src="data:image/jpeg;base64,'+k.jpeg_base64+'">').join('');
+  $('#dOut').innerHTML=h;
+}
+function showBatch(r){
+  let h='<dl style="margin-top:14px"><dt>Снимков</dt><dd>'+r.files.length+'</dd><dt>С координатами</dt><dd>'+r.with_gps+'</dd><dt>Найдено</dt><dd>'+
+    esc(Object.entries(r.totals).map(([k,v])=>k+': '+v).join(', ')||'ничего')+'</dd></dl>';
+  h+=r.files.map(f=>f.error?'<div class="det"><span>'+esc(f.file)+'</span><span class="tag">'+esc(f.error)+'</span></div>':
+    '<div class="det"><span>'+esc(f.file)+(f.gps?' · на карте':'')+'</span><span>'+f.found+(f.diseased?' <span class="tag">болезнь: '+f.diseased+'</span>':'')+'</span></div>').join('');
+  $('#dOut').innerHTML=h;
+  const pts=r.files.filter(f=>f.gps);
+  pts.forEach(f=>L.circleMarker([f.gps.lat,f.gps.lon],{radius:8,color:'#fff',weight:2,fillColor:f.diseased?'#c8432f':'#3f8f4f',fillOpacity:1})
+    .addTo(map).bindPopup(esc(f.file)+': найдено '+f.found));
+  if(pts.length)map.fitBounds(pts.map(f=>[f.gps.lat,f.gps.lon]),{maxZoom:17,padding:[40,40]});
+}
+
+const fmt=(n,d=1)=>Number(n).toLocaleString('ru-RU',{maximumFractionDigits:d});
+let YC=[];
+function yieldHtml(d,area,price){
+  if(!d.gain)return '<div class="note">'+esc(d.message)+'</div>';
+  const per=d.gain_t/area,name=d.crop&&d.crop.ru?d.crop.ru:d.crop;
+  const money=n=>price?'<td>≈ '+fmt(n*price,0)+' ₸</td>':'';
+  let h='<div class="hero">+'+fmt(d.gain_t,2)+' т</div><p class="msg">'+esc(name)+': на '+fmt(area)+' га урожай вырастет на '+fmt(d.gain_pct)+'%'+(price?', это около '+fmt(d.gain_t*price,0)+' ₸':'')+'.</p>';
+  h+='<div class="bars"><div><span><b>Без системы</b><b>'+fmt(d.total_before_t,2)+' т</b></span><i style="width:'+(d.total_before_t/d.total_after_t*100).toFixed(1)+'%"></i></div>'+
+     '<div class="after"><span><b>С системой</b><b>'+fmt(d.total_after_t,2)+' т</b></span><i style="width:100%"></i></div></div>';
+  h+='<div class="tiles"><div><small>Урожайность, т/га</small><b>'+d.yield_before_t_ha+' → '+d.yield_after_t_ha+'</b></div>'+
+     '<div><small>Потери</small><b>'+d.l1_pct+'% → '+d.l2_pct+'%</b></div>'+
+     '<div><small>Спасённый урожай</small><b>'+fmt(d.y_saved_t,2)+' т</b></div>'+
+     '<div><small>Прирост с гектара</small><b>+'+fmt(per,2)+' т</b></div></div>';
+  h+='<h2 style="margin-top:18px">Если применить шире</h2><table class="macro"><tr><th>Площадь</th><th>Прирост</th>'+(price?'<th>Выгода</th>':'')+'</tr>'+
+     [100,1000,10000,100000].map(n=>'<tr><td>'+fmt(n,0)+' га</td><td>+'+fmt(per*n,0)+' т</td>'+money(per*n)+'</tr>').join('')+'</table>'+
+     '<p class="hint">Расчёт по формулам проекта: потенциал = урожай ÷ (1 − L1), результат = потенциал × (1 − L2). Значения по умолчанию ориентировочные.</p>';
+  return h;
+}
+function yieldDefaults(){
+  const c=YC.find(x=>String(x.id)===$('#ycrop').value);
+  $('#ycur').placeholder=c?'по умолчанию '+c.base_yield_t_ha:'обязательно';
+  $('#yl1').placeholder=c?'по умолчанию '+c.default_l1_pct:'по умолчанию 15';
+}
+async function calc(){
+  const out=$('#yOut'),area=+$('#area').value,price=+$('#price').value||0;
+  if(!(area>0)){out.innerHTML='<div class="err">Укажите площадь больше нуля.</div>';return}
+  const q=new URLSearchParams({crop_id:$('#ycrop').value,area_ha:area});
+  if($('#ycur').value)q.set('current_yield',$('#ycur').value);
+  if($('#yl1').value)q.set('l1',$('#yl1').value);
+  busy('#calc',true,'Считаем…');
+  try{out.innerHTML=yieldHtml(await api('/api/v1/yield/impact?'+q),area,price)}
+  catch(e){out.innerHTML='<div class="err">'+esc(e.message)+'</div>'}finally{busy('#calc',false)}
+}
+
+async function boot(){
+  initMap();
+  $('#crop').innerHTML=Object.entries(CROP).map(([k,v])=>'<option value="'+k+'">'+v+'</option>').join('');
+  $('#go').onclick=analyze;$('#det').onclick=detect;$('#dgo').onclick=drone;$('#calc').onclick=calc;
+  try{const h=await api('/health');
+    $('#badges').innerHTML='<span class="'+(h.smap_enabled?'on':'')+'">NASA SMAP: '+(h.smap_enabled?'подключён':'выключен')+'</span><span class="'+(h.sensor_fresh?'on':'')+'">Датчик: '+(h.sensor_fresh?'на связи':'не подключён')+'</span>'}catch(e){}
+  try{YC=await api('/api/v1/yield/crops');
+    $('#ycrop').innerHTML='<option value="0">Своя культура</option>'+YC.map(c=>'<option value="'+c.id+'">'+esc(c.ru)+'</option>').join('');
+    $('#ycrop').value='1';$('#ycrop').onchange=yieldDefaults;yieldDefaults()}catch(e){}
+}
+boot();
+</script>
+<!-- Агро Ассистент — отдельная страница-ассистент (BYOK, стриминг, встроенная справка) -->
+<div class="ai-overlay" id="ai-overlay" hidden aria-hidden="true">
+  <div class="ai-page" role="dialog" aria-modal="true" aria-labelledby="ai-title">
+    <header class="ai-head">
+      <div class="ai-title-wrap">
+        <span class="ai-dot" aria-hidden="true"></span>
+        <div>
+          <h2 id="ai-title">Агро Ассистент</h2>
+          <p>Поле, полив, болезни растений и настройка платформы.</p>
+        </div>
+      </div>
+      <div class="ai-head-actions">
+        <button class="ai-link" id="ai-reset" type="button">Новый диалог</button>
+        <button class="ai-config-btn" id="ai-config-toggle" type="button" aria-expanded="false" aria-controls="ai-config">⚙ API Keys</button>
+        <button class="ai-close" id="ai-close" type="button" aria-label="Закрыть ассистента">✕</button>
+      </div>
+    </header>
+
+    <div class="ai-personas" role="group" aria-label="Персона ассистента">
+      <span>Персона:</span>
+      <button class="ai-persona" type="button" data-persona="agronomist" aria-pressed="true">Агроном</button>
+      <button class="ai-persona" type="button" data-persona="engineer" aria-pressed="false">Инженер</button>
+      <button class="ai-persona" type="button" data-persona="pilot" aria-pressed="false">Пилот дрона</button>
+      <button class="ai-persona" type="button" data-persona="support" aria-pressed="false">Поддержка</button>
+    </div>
+
+    <div class="ai-config" id="ai-config" hidden>
+      <div class="ai-presets" aria-label="Провайдеры">
+        <button type="button" data-preset="gemini">Gemini</button>
+        <button type="button" data-preset="openai">OpenAI</button>
+        <button type="button" data-preset="deepseek">DeepSeek</button>
+        <button type="button" data-preset="groq">Groq</button>
+        <button type="button" data-preset="openrouter">OpenRouter</button>
+        <button type="button" data-preset="local">Local</button>
+      </div>
+      <div class="ai-config-grid">
+        <div>
+          <label for="ai-base-url">API Endpoint</label>
+          <input type="text" id="ai-base-url" autocomplete="off" spellcheck="false">
+        </div>
+        <div>
+          <label for="ai-model">Модель</label>
+          <input type="text" id="ai-model" autocomplete="off" spellcheck="false">
+        </div>
+      </div>
+      <div class="ai-config-grid">
+        <div>
+          <label for="ai-temp">Температура (<span id="ai-temp-val">0.7</span>)</label>
+          <input type="range" id="ai-temp" min="0" max="1.5" step="0.1" value="0.7">
+        </div>
+        <div>
+          <label for="ai-api-key">Bearer Token / API Key</label>
+          <input type="password" id="ai-api-key" placeholder="пусто = ключ сервера / справка" autocomplete="off">
+        </div>
+      </div>
+      <div class="ai-config-actions">
+        <button id="ai-test" type="button">Проверить подключение</button>
+        <button id="ai-save-config" type="button">Сохранить и закрыть</button>
+      </div>
+      <div class="ai-test-result" id="ai-test-result" hidden></div>
+      <p class="ai-hint" id="ai-server-hint">Ключ хранится только в вашем браузере (localStorage) и отправляется только вашему серверу <code>/api/chat</code>. Если поле пустое, используется ключ сервера.</p>
+    </div>
+
+    <div class="ai-chat" id="ai-chat-messages" role="log" aria-live="polite" aria-label="Диалог"></div>
+
+    <div class="ai-quick" aria-label="Быстрые вопросы">
+      <button type="button" data-quick="Когда нужно поливать моё поле?">💧 Когда поливать?</button>
+      <button type="button" data-quick="Что показывают данные NASA SMAP и POWER?">🛰️ NASA SMAP/POWER</button>
+      <button type="button" data-quick="Как распознать болезнь по фото листа?">🍃 Болезнь листа</button>
+      <button type="button" data-quick="Что посеять после пшеницы?">🌾 Севооборот</button>
+    </div>
+
+    <form class="ai-form" id="ai-form">
+      <input type="text" id="ai-input" placeholder="Спросите про поле, полив, болезни…" autocomplete="off" required aria-label="Сообщение">
+      <button type="submit" id="ai-send">Отправить</button>
+    </form>
+  </div>
+</div>
+
+<button id="ai-chat-btn" type="button" aria-label="Открыть Агро Ассистента" aria-expanded="false" aria-controls="ai-overlay">
+  💬<span class="ai-btn-dot" aria-hidden="true"></span>
+</button>
+
+<style>
+#ai-chat-btn{position:fixed;right:24px;bottom:24px;z-index:9000;width:60px;height:60px;border:0;border-radius:50%;background:var(--ink);color:#fff;font-size:26px;cursor:pointer;box-shadow:0 10px 28px rgba(18,48,47,.28);transition:transform .18s ease,box-shadow .18s ease;margin:0;padding:0;display:grid;place-items:center}
+#ai-chat-btn:hover{transform:translateY(-2px) scale(1.04);box-shadow:0 14px 34px rgba(18,48,47,.34)}
+#ai-chat-btn:focus-visible{outline:3px solid var(--wheat);outline-offset:3px}
+#ai-chat-btn .ai-btn-dot{position:absolute;top:1px;right:1px;width:12px;height:12px;border-radius:50%;background:var(--ok);border:2px solid var(--bg)}
+.ai-overlay{position:fixed;inset:0;z-index:9500;background:rgba(18,48,47,.46);-webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px);display:flex;align-items:center;justify-content:center;padding:18px}
+.ai-overlay[hidden]{display:none!important}
+.ai-page{width:min(920px,100%);height:min(900px,92vh);background:#fff;border-radius:18px;box-shadow:0 28px 80px rgba(18,48,47,.3);display:flex;flex-direction:column;min-height:0;overflow:hidden;border:1px solid rgba(255,255,255,.5);font-family:Onest,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:var(--ink)}
+.ai-head{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:16px 20px;border-bottom:1px solid var(--line);background:linear-gradient(180deg,#fff,#f8fbf9);flex:none;flex-wrap:wrap}
+.ai-title-wrap{display:flex;align-items:center;gap:12px;min-width:0}
+.ai-dot{width:11px;height:11px;border-radius:50%;background:var(--ok);box-shadow:0 0 0 4px rgba(63,143,79,.14);flex:none}
+.ai-title-wrap h2{font:600 17px/1.2 Unbounded,Onest,sans-serif;margin:0;letter-spacing:-.01em}
+.ai-title-wrap p{margin:2px 0 0;color:var(--muted);font-size:12px}
+.ai-head-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.ai-link{background:none;border:0;color:var(--muted);font:600 12px Onest,sans-serif;cursor:pointer;padding:6px 8px;border-radius:8px;margin:0;width:auto}
+.ai-link:hover{background:var(--bg);color:var(--ink)}
+.ai-config-btn{background:#fff;border:1px solid var(--line);color:var(--ok);font:600 12px Onest,sans-serif;border-radius:9px;padding:8px 12px;cursor:pointer;margin:0;width:auto}
+.ai-config-btn:hover{border-color:var(--ok);background:#f3f9f4}
+.ai-close{width:34px;height:34px;border:1px solid var(--line);border-radius:9px;background:#fff;color:var(--muted);font-size:16px;cursor:pointer;margin:0;padding:0;display:grid;place-items:center;line-height:1}
+.ai-close:hover{color:var(--ink);border-color:var(--muted)}
+.ai-personas{display:flex;align-items:center;gap:7px;padding:10px 20px;border-bottom:1px solid var(--line);flex:none;overflow-x:auto;background:#fff}
+.ai-personas>span{font-size:11px;color:var(--muted);white-space:nowrap;margin-right:2px}
+.ai-persona{width:auto;margin:0;padding:5px 11px;border-radius:99px;border:1px solid var(--line);background:#f7faf8;color:var(--muted);font:600 11px Onest,sans-serif;cursor:pointer;white-space:nowrap}
+.ai-persona[aria-pressed="true"]{background:#e6f2e8;border-color:#9ac7a3;color:#1f5c2c}
+.ai-config{padding:14px 20px;border-bottom:1px solid var(--line);background:#f8fbf8;flex:none;max-height:46%;overflow-y:auto}
+.ai-config[hidden]{display:none!important}
+.ai-presets{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+.ai-presets button{width:auto;margin:0;padding:5px 10px;border-radius:7px;border:1px solid var(--line);background:#fff;color:var(--ink);font:600 11px Onest,sans-serif;cursor:pointer}
+.ai-presets button:hover{border-color:var(--ok);color:var(--ok)}
+.ai-config-grid{display:grid;grid-template-columns:1.25fr 1fr;gap:10px;margin-bottom:8px}
+.ai-config-grid label{display:block;font-size:11px;color:var(--muted);margin:0 0 3px}
+.ai-config input[type=text],.ai-config input[type=password]{width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--ink);font:12px ui-monospace,SFMono-Regular,Consolas,monospace;outline:none}
+.ai-config input:focus{border-color:var(--ok);box-shadow:0 0 0 3px rgba(63,143,79,.1)}
+.ai-config input[type=range]{width:100%;accent-color:var(--ok);margin:6px 0 0}
+.ai-config-actions{display:flex;gap:8px;align-items:center;margin-top:4px;flex-wrap:wrap}
+.ai-config-actions button{width:auto;margin:0;padding:8px 14px;border-radius:8px;border:1px solid var(--line);background:#fff;color:var(--ink);font:600 12px Onest,sans-serif;cursor:pointer}
+.ai-config-actions #ai-save-config{background:var(--ok);border-color:var(--ok);color:#fff}
+.ai-config-actions button:hover:not(:disabled){filter:brightness(.97)}
+.ai-config-actions button:disabled{opacity:.55;cursor:wait}
+.ai-test-result{margin-top:8px;padding:8px 10px;border-radius:8px;font-size:12px;line-height:1.4}
+.ai-test-result[hidden]{display:none!important}
+.ai-test-result.ok{background:#e6f2e8;color:#1f5c2c}
+.ai-test-result.bad{background:#f9e2dd;color:#7a2417}
+.ai-hint{font-size:11px;color:var(--muted);margin:8px 0 0;line-height:1.45}
+.ai-hint code{background:#e9f1eb;padding:1px 4px;border-radius:4px;font:10.5px ui-monospace,Consolas,monospace;color:#1f5c2c}
+.ai-chat{flex:1;min-height:0;overflow-y:auto;padding:18px 20px;display:flex;flex-direction:column;gap:10px;background:#f7faf7;scroll-behavior:smooth}
+.ai-msg{max-width:82%;padding:10px 13px;border-radius:12px;font-size:13.5px;line-height:1.55;border:1px solid transparent;overflow-wrap:anywhere}
+.ai-msg-assistant{align-self:flex-start;background:#fff;border-color:var(--line);color:var(--ink);border-bottom-left-radius:4px;box-shadow:0 1px 2px rgba(18,48,47,.04)}
+.ai-msg-assistant strong{color:#1f5c2c;font-weight:700}
+.ai-msg-assistant code{background:#eef4ef;color:#1f5c2c;padding:1px 5px;border-radius:4px;font:11px ui-monospace,Consolas,monospace}
+.ai-msg p{margin:0 0 6px}
+.ai-msg p:last-child{margin-bottom:0}
+.ai-msg ul,.ai-msg ol{margin:6px 0;padding-left:20px}
+.ai-msg li{margin:2px 0}
+.ai-msg-user{align-self:flex-end;background:var(--ink);border-color:var(--ink);color:#fff;border-bottom-right-radius:4px}
+.ai-notice{align-self:center;font-size:10px;color:var(--muted);background:#e9efeb;border-radius:99px;padding:3px 11px;max-width:90%;text-align:center}
+.ai-error{align-self:stretch;background:#f9e2dd;color:#7a2417;border-radius:10px;padding:9px 11px;font-size:12.5px;line-height:1.45;border:1px solid #efc6bd}
+.ai-error code{font:11px ui-monospace,Consolas,monospace;background:#f3d1c9;padding:1px 4px;border-radius:4px}
+.ai-typing{display:inline-flex;gap:3px;align-items:center;height:1em}
+.ai-typing i{width:5px;height:5px;border-radius:50%;background:var(--muted);animation:ai-bounce 1.2s infinite}
+.ai-typing i:nth-child(2){animation-delay:.15s}.ai-typing i:nth-child(3){animation-delay:.3s}
+@keyframes ai-bounce{0%,60%,100%{transform:translateY(0);opacity:.5}30%{transform:translateY(-3px);opacity:1}}
+.ai-quick{display:flex;gap:6px;padding:10px 20px 0;flex-wrap:wrap;background:#fff;flex:none;border-top:1px solid var(--line)}
+.ai-quick button{width:auto;margin:0;padding:6px 10px;border-radius:99px;border:1px solid var(--line);background:#fff;color:var(--muted);font:600 11px Onest,sans-serif;cursor:pointer;white-space:nowrap}
+.ai-quick button:hover{border-color:var(--ok);color:var(--ok);background:#f5faf6}
+.ai-form{display:flex;gap:8px;padding:10px 20px 16px;background:#fff;flex:none}
+.ai-form input{flex:1;min-width:0;padding:11px 13px;border:1px solid var(--line);border-radius:10px;font:13.5px Onest,sans-serif;color:var(--ink);outline:none;background:#fbfdfb}
+.ai-form input:focus{border-color:var(--ok);box-shadow:0 0 0 3px rgba(63,143,79,.1);background:#fff}
+.ai-form button{width:auto;margin:0;padding:0 18px;border:0;border-radius:10px;background:var(--ink);color:#fff;font:600 13px Onest,sans-serif;cursor:pointer}
+.ai-form button:disabled{opacity:.5;cursor:wait}
+@media(max-width:680px){
+  .ai-overlay{padding:0}
+  .ai-page{width:100%;height:100%;max-height:none;border-radius:0;border:0}
+  .ai-head{padding:14px 16px}
+  .ai-title-wrap p{display:none}
+  .ai-personas,.ai-config,.ai-chat,.ai-quick,.ai-form{padding-left:14px;padding-right:14px}
+  .ai-config-grid{grid-template-columns:1fr}
+  .ai-msg{max-width:90%}
+  #ai-chat-btn{right:16px;bottom:16px;width:56px;height:56px}
+}
+@media(prefers-reduced-motion:reduce){.ai-chat{scroll-behavior:auto}@keyframes ai-bounce{0%,100%{opacity:.6}}}
+</style>
+
+<script>
+(function(){
+'use strict';
+var LS_KEY='agro-ai-assistant';
+var DEFAULT_BASE='https://generativelanguage.googleapis.com/v1beta/openai';
+var DEFAULT_MODEL='gemini-3.6-flash';
+var IDLE_TIMEOUT=45000;
+var overlay=document.getElementById('ai-overlay');
+var launcher=document.getElementById('ai-chat-btn');
+var sideOpen=document.getElementById('ai-open-side');
+var closeBtn=document.getElementById('ai-close');
+var resetBtn=document.getElementById('ai-reset');
+var configToggle=document.getElementById('ai-config-toggle');
+var configBox=document.getElementById('ai-config');
+var saveBtn=document.getElementById('ai-save-config');
+var testBtn=document.getElementById('ai-test');
+var testResult=document.getElementById('ai-test-result');
+var serverHint=document.getElementById('ai-server-hint');
+var baseUrlEl=document.getElementById('ai-base-url');
+var modelEl=document.getElementById('ai-model');
+var tempEl=document.getElementById('ai-temp');
+var tempVal=document.getElementById('ai-temp-val');
+var keyEl=document.getElementById('ai-api-key');
+var messagesEl=document.getElementById('ai-chat-messages');
+var form=document.getElementById('ai-form');
+var input=document.getElementById('ai-input');
+var sendBtn=document.getElementById('ai-send');
+
+var PERSONA_PROMPTS={
+  agronomist:'Ты — старший агроном платформы Smart Farming AI. Отвечай на русском, практично и по делу. Опирайся на данные платформы: влажность почвы NASA POWER/SMAP, прогноз Open-Meteo, тип почвы SoilGrids, диагностику листа YOLO, севооборот и калькулятор урожая. Объясняй решения понятным языком, без воды.',
+  engineer:'Ты — ведущий инженер Smart Farming AI. Отвечай на русском, технически точно: FastAPI-бэкенд, модели YOLO (best.pt, seg.pt), датчик ESP32 по serial-порту, интеграции NASA POWER/SMAP и Open-Meteo, SQLite, Render. По существу, с конкретными шагами.',
+  pilot:'Ты — пилот дрона Smart Farming AI. Отвечай на русском, операционно: планирование полётных заданий, высота, GSD, батареи, перекрытие снимков, батч-обработка снимков с EXIF GPS и видео с трекингом. Кратко и по делу.',
+  support:'Ты — служба поддержки Smart Farming AI. Отвечай на русском, дружелюбно и кратко: помогаешь с функциями, настройкой, ключами API и диагностикой. Если не уверен — так и скажи и предложи, что проверить.'
+};
+var PERSONA_NAMES={agronomist:'Агроном',engineer:'Инженер',pilot:'Пилот дрона',support:'Поддержка'};
+var currentPersona='agronomist';
+
+var PROJECT_CONTEXT=[
+  '[КОНТЕКСТ ПРОЕКТА SMART FARMING AI]',
+  '- Платформа «Smart Farming AI»: советы по поливу и севообороту по данным NASA, диагностика болезней растений по фото листа, карта поля Leaflet.',
+  '- Влажность почвы: NASA POWER (история) и NASA SMAP L4 (спутник, через Earthdata), прогноз осадков Open-Meteo, тип почвы и гидрологика — SoilGrids (ISRIC).',
+  '- Совет по поливу учитывает корневую зону 0–100 см, точку увядания/полевую влагоёмкость, культуру, тип почвы и дождь на 48 ч вперёд.',
+  '- Рекомендации по севообороту — скоринг культур по дефициту влаги и предшественнику.',
+  '- Диагностика: YOLO-модели (best.pt — болезни листьев, seg.pt — сегментация), батч-режим для снимков дрона с EXIF GPS, видео с трекингом объектов.',
+  '- Калькулятор урожая: потенциал = урожай/(1 − L1), результат = потенциал × (1 − L2), L2 = 5%.',
+  '- Датчик: ESP32/Arduino, показания по serial, сырой сигнал пересчитывается в % через SENSOR_RAW_DRY/WET.',
+  '- Стек: FastAPI + SQLite, Render, Leaflet, YOLO (ultralytics).',
+  '- Это поддержка принятия решений, а не замена консультации агронома.'
+].join('\n');
+
+var PRESETS={
+  gemini:{url:'https://generativelanguage.googleapis.com/v1beta/openai',model:'gemini-3.6-flash'},
+  openai:{url:'https://api.openai.com/v1',model:'gpt-4o-mini'},
+  deepseek:{url:'https://api.deepseek.com/v1',model:'deepseek-chat'},
+  groq:{url:'https://api.groq.com/openai/v1',model:'llama-3.3-70b-versatile'},
+  openrouter:{url:'https://openrouter.ai/api/v1',model:'meta-llama/llama-3.1-8b-instruct'},
+  local:{url:'http://localhost:1234/v1',model:'local-model'}
+};
+
+var chatHistory=[];
+var state={busy:false,serverLoaded:false,serverKey:false,serverModel:'',serverBase:'',fallbacks:[]};
+var lastFocus=null;
+
+function readStore(){try{return JSON.parse(localStorage.getItem(LS_KEY))||{}}catch(e){return{}}}
+function writeStore(patch){var next=Object.assign(readStore(),patch);try{localStorage.setItem(LS_KEY,JSON.stringify(next))}catch(e){}}
+function loadSettings(){
+  var s=readStore();
+  baseUrlEl.value=s.baseUrl||DEFAULT_BASE;
+  modelEl.value=s.model||DEFAULT_MODEL;
+  tempEl.value=s.temp||'0.7';
+  tempVal.textContent=tempEl.value;
+  keyEl.value=s.key||'';
+  setPersona(s.persona&&PERSONA_PROMPTS[s.persona]?s.persona:'agronomist',true);
+  updateServerHint();
+}
+function saveSettings(){
+  writeStore({baseUrl:baseUrlEl.value.trim(),model:modelEl.value.trim(),temp:tempEl.value,key:keyEl.value.trim(),persona:currentPersona});
+}
+function setPersona(p,silent){
+  if(!PERSONA_PROMPTS[p])return;
+  currentPersona=p;
+  Array.prototype.forEach.call(document.querySelectorAll('.ai-persona'),function(b){
+    b.setAttribute('aria-pressed',b.getAttribute('data-persona')===p?'true':'false');
+  });
+  if(!silent)appendNotice('Персона: '+PERSONA_NAMES[p]);
+  writeStore({persona:p});
+}
+function updateServerHint(){
+  if(!serverHint)return;
+  var html='Ключ хранится только в вашем браузере (localStorage) и отправляется только вашему серверу <code>/api/chat</code>. ';
+  if(!state.serverLoaded)html+='Если поле пустое, используется ключ сервера.';
+  else if(state.serverKey)html+='Ключ сервера подключён — можно оставить поле пустым.';
+  else html+='Ключ сервера не задан — вставьте свой ключ, чтобы получать ответы от модели.';
+  if(state.serverModel)html+='<br>Серверная модель по умолчанию: <code>'+escapeHtml(state.serverModel)+'</code>.';
+  serverHint.innerHTML=html;
+}
+function escapeHtml(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function inlineMd(text){
+  return text
+    .replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')
+    .replace(/`([^`]+)`/g,'<code>$1</code>')
+    .replace(/(^|[^*])\*([^*\n]+)\*/g,'$1<em>$2</em>');
+}
+function formatMarkdown(src){
+  var escaped=escapeHtml(String(src));
+  var lines=escaped.split(/\r?\n/);
+  var html='',listType='';
+  for(var i=0;i<lines.length;i++){
+    var line=lines[i];
+    var bullet=line.match(/^\s*[-*•]\s+(.*)$/);
+    var numbered=line.match(/^\s*\d+\.\s+(.*)$/);
+    if(bullet||numbered){
+      var type=bullet?'ul':'ol';
+      if(listType!==type){if(listType)html+='</'+listType+'>';html+='<'+type+'>';listType=type;}
+      html+='<li>'+inlineMd((bullet||numbered)[1])+'</li>';
+      continue;
+    }
+    if(listType){html+='</'+listType+'>';listType='';}
+    if(!line.trim()){html+='<br>';continue;}
+    var h=line.match(/^\s*#{1,4}\s+(.*)$/);
+    if(h){html+='<p><strong>'+inlineMd(h[1])+'</strong></p>';continue;}
+    html+='<p>'+inlineMd(line)+'</p>';
+  }
+  if(listType)html+='</'+listType+'>';
+  return html;
+}
+function scrollChat(){messagesEl.scrollTop=messagesEl.scrollHeight;}
+function appendNotice(text){
+  var d=document.createElement('div');d.className='ai-notice';d.textContent='['+text+']';
+  messagesEl.appendChild(d);scrollChat();
+}
+function appendMessage(role,text){
+  var d=document.createElement('div');
+  d.className='ai-msg '+(role==='user'?'ai-msg-user':'ai-msg-assistant');
+  if(role==='user')d.textContent=text;
+  else if(text==='…')d.innerHTML='<span class="ai-typing" aria-label="Печатает"><i></i><i></i><i></i></span>';
+  else d.innerHTML=formatMarkdown(text);
+  messagesEl.appendChild(d);scrollChat();
+  return d;
+}
+function seedWelcome(){
+  messagesEl.innerHTML='';
+  var d=document.createElement('div');
+  d.className='ai-msg ai-msg-assistant';
+  d.innerHTML='<strong>Здравствуйте! Я — Агро Ассистент.</strong><br>Помогу с поливом, влажностью почвы (NASA SMAP/POWER), диагностикой болезней листа, севооборотом и калькулятором урожая.<br><br>Спросите что угодно про ваше поле. Без ключа API отвечу из встроенной справки; свой ключ можно добавить в <strong>⚙ API Keys</strong>.';
+  messagesEl.appendChild(d);
+}
+function openPanel(){
+  if(!overlay.hidden)return;
+  lastFocus=document.activeElement;
+  overlay.hidden=false;
+  overlay.setAttribute('aria-hidden','false');
+  document.body.classList.add('ai-lock');
+  launcher.setAttribute('aria-expanded','true');
+  if(window.history&&window.history.replaceState)window.history.replaceState(null,'','#assistant');
+  setTimeout(function(){input.focus();},30);
+}
+function closePanel(){
+  if(overlay.hidden)return;
+  overlay.hidden=true;
+  overlay.setAttribute('aria-hidden','true');
+  document.body.classList.remove('ai-lock');
+  launcher.setAttribute('aria-expanded','false');
+  if(window.history&&window.history.replaceState)window.history.replaceState(null,'',location.pathname+location.search);
+  if(lastFocus&&typeof lastFocus.focus==='function')lastFocus.focus();else launcher.focus();
+}
+
+function readConfig(){
+  return {
+    baseUrl:baseUrlEl.value.trim().replace(/\/+$/,''),
+    model:modelEl.value.trim(),
+    temp:parseFloat(tempEl.value)||0.7,
+    key:keyEl.value.trim()
+  };
+}
+function fieldSnapshot(){
+  var lat=document.getElementById('lat'),lon=document.getElementById('lon');
+  var crop=document.getElementById('crop'),soil=document.getElementById('soil');
+  var irr=document.getElementById('irrBig'),data=document.getElementById('dl');
+  var cropName=crop&&crop.selectedIndex>=0?crop.options[crop.selectedIndex].text:'';
+  var soilName=soil&&soil.selectedIndex>=0?soil.options[soil.selectedIndex].text:'';
+  var parts=[];
+  if(lat&&lon&&lat.value&&lon.value)parts.push('координаты поля: '+lat.value+', '+lon.value);
+  if(cropName)parts.push('культура: '+cropName);
+  if(soilName&&soilName!=='Определить сам')parts.push('тип почвы: '+soilName);
+  if(irr&&irr.textContent.trim()&&irr.offsetParent!==null)parts.push('текущий совет по поливу: '+irr.textContent.trim());
+  if(data&&data.textContent.trim()&&data.offsetParent!==null)parts.push('последние данные по точке: '+data.textContent.replace(/\s+/g,' ').trim().slice(0,600));
+  return parts.length?'[ТЕКУЩЕЕ СОСТОЯНИЕ ИНТЕРФЕЙСА]\n- '+parts.join('\n- '):'';
+}
+function buildSystemPrompt(){
+  var snap=fieldSnapshot();
+  return PERSONA_PROMPTS[currentPersona]+'\n\n'+PROJECT_CONTEXT+(snap?'\n\n'+snap:'')+'\n\nОтвечай на русском языке, кратко и по делу. Если данных не хватает — так и скажи, не выдумывай значения.';
+}
+function buildMessages(query){
+  return [{role:'system',content:buildSystemPrompt()}]
+    .concat(chatHistory.slice(-8))
+    .concat([{role:'user',content:query}]);
+}
+
+function simulateOfflineResponse(query,target,done){
+  setTimeout(function(){
+    var q=query.toLowerCase(),reply;
+    if(/(привет|здравств|hello|hi|салам)/.test(q)){
+      reply='**Здравствуйте!**\nЯ — Агро Ассистент платформы Smart Farming AI. Могу подсказать про полив и влажность, NASA SMAP/POWER и погоду, болезни листа (YOLO), севооборот, калькулятор урожая и датчик ESP32. Спросите про ваше поле или добавьте ключ API в **⚙ API Keys** для ответов от модели.';
+    }else if(/(полив|влажн|орошен|вод)/.test(q)){
+      reply='**Полив:**\nНажмите «Анализировать поле» — система возьмёт влажность корневой зоны (0–100 см) из NASA SMAP/POWER, тип почвы из SoilGrids и прогноз осадков Open-Meteo на 48 ч, и скажет, сколько миллиметров нужно (или что полив пока не нужен). Датчик ESP32 на поле перекрывает спутниковую оценку, если он на связи.';
+    }else if(/(smap|power|nasa|спутник|осадк|open-?meteo|почв)/.test(q)){
+      reply='**Данные NASA и погода:**\nNASA POWER даёт историческое испарение и влажность, NASA SMAP L4 — фактическую влажность почвы сверху и в корневой зоне (нужны EARTHDATA_USER/PASS в smap.env), Open-Meteo — осадки на 48 ч и архив, SoilGrids — текстуру и гидрологические константы почвы. Источник по каждой точке виден в блоке «Данные по точке».';
+    }else if(/(болезн|лист|yolo|пятн|ржав|фитофтор|милдью|мучнист|фотограф|фото)/.test(q)){
+      reply='**Диагностика листа:**\nСфотографируйте лист крупно и при хорошем свете в блоке «Фото листа» и нажмите «Распознать болезнь». YOLO вернёт класс болезни и уверенность; галка «Показать и неуверенные» снизит порог. Для дроновых снимков есть раздел «Дрон, камера, видео» с батч-обработкой и разметкой GPS на карте.';
+    }else if(/(севооборот|rotation|после|посеять|следующ|чередован)/.test(q)){
+      reply='**Севооборот:**\nБлок «Что сажать следующим сезоном» скорит культуры по водному дефициту сезона и предшественнику (история влажности за годы — Open-Meteo Archive). Наведите на культуру, чтобы увидеть причину оценки. После зерновых обычно хороши бобовые и масличные.';
+    }else if(/(урожай|yield|потер|calc|выручк)/.test(q)){
+      reply='**Калькулятор урожая:**\nСчитает спасённый урожай: потенциал = текущей урожайности ÷ (1 − L1) без системы против потерь L2 = 5% с ней. Подставьте свою культуру, площадь и цену за тонну — получите прирост в тоннах и тенге, включая сценарии 100…100 000 га.';
+    }else if(/(esp32|датчик|sensor|arduino|serial|сенсор)/.test(q)){
+      reply='**Датчик поля:**\nESP32/Arduino шлёт сырую влажность на сервер (POST /api/v1/sensor/ingest, защита SENSOR_KEY). Сервер пересчитывает сырое значение в % по SENSOR_RAW_DRY/WET. Статус «Датчик: на связи» виден в бейджах сверху.';
+    }else{
+      reply='**Агро Ассистент (справка):**\nЯ могу подсказать про: полив и влажность, данные NASA SMAP/POWER и погоду, диагностику болезней листа (YOLO), севооборот и калькулятор урожая, а также датчик ESP32. Добавьте свой ключ API в ⚙ API Keys — отвечу на любой вопрос по вашему полю.';
+    }
+    target.innerHTML=formatMarkdown(reply);
+    appendNotice('Источник: встроенная справка');
+    scrollChat();
+    if(done)done(reply);
+  },350);
+}
+
+async function handleSubmit(e){
+  e.preventDefault();
+  if(state.busy)return;
+  var query=input.value.trim();
+  if(!query)return;
+
+  var cfg=readConfig();
+  if(!cfg.baseUrl||!cfg.model){
+    appendNotice('Укажите Endpoint и модель в ⚙ API Keys');
+    configBox.hidden=false;configToggle.setAttribute('aria-expanded','true');
+    return;
+  }
+  saveSettings();
+
+  appendMessage('user',query);
+  input.value='';
+  var node=appendMessage('assistant','…');
+  state.busy=true;sendBtn.disabled=true;
+
+  var controller=new AbortController();
+  var idleTimer=null;
+  function armIdle(){
+    if(idleTimer)clearTimeout(idleTimer);
+    idleTimer=setTimeout(function(){try{controller.abort()}catch(e){}},IDLE_TIMEOUT);
+  }
+  armIdle();
+  var fullText='';
+
+  function consumeLine(rawLine){
+    var line=rawLine.replace(/\r$/,'');
+    if(!line||line.charAt(0)===':')return;
+    if(line.indexOf('data:')!==0)return;
+    var data=line.slice(5);
+    if(data.charAt(0)===' ')data=data.slice(1);
+    if(data==='[DONE]')return;
+    var parsed;
+    try{parsed=JSON.parse(data);}catch(err){return;}
+    if(parsed.error)throw new Error(parsed.error.message||'Ошибка API');
+    var choice=parsed.choices&&parsed.choices[0];
+    var token=choice&&((choice.delta&&choice.delta.content)||(choice.message&&choice.message.content))||'';
+    if(token){fullText+=token;node.innerHTML=formatMarkdown(fullText);scrollChat();}
+  }
+
+  try{
+    var isLocal=/^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0|host\.docker\.internal)([:/]|$)/i.test(cfg.baseUrl);
+    if(!cfg.key&&!isLocal&&state.serverLoaded&&!state.serverKey){
+      simulateOfflineResponse(query,node,function(reply){
+        chatHistory.push({role:'user',content:query});
+        chatHistory.push({role:'assistant',content:reply});
+      });
+      return;
+    }
+
+    var res=await fetch('/api/chat',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        base_url:cfg.baseUrl,
+        api_key:cfg.key,
+        model:cfg.model,
+        temperature:cfg.temp,
+        messages:buildMessages(query),
+        stream:true
+      }),
+      signal:controller.signal
+    });
+
+    if(res.status===401&&!cfg.key){
+      simulateOfflineResponse(query,node,function(reply){
+        chatHistory.push({role:'user',content:query});
+        chatHistory.push({role:'assistant',content:reply});
+      });
+      return;
+    }
+
+    if(!res.ok){
+      var detail='HTTP '+res.status;
+      try{var j=await res.json();detail=(typeof j.detail==='string'?j.detail:JSON.stringify(j.detail))||detail}catch(err){}
+      throw new Error(detail);
+    }
+
+    var usedModel=res.headers.get('X-AI-Model')||'';
+    var ctype=(res.headers.get('content-type')||'').toLowerCase();
+    if(ctype.indexOf('text/event-stream')<0&&ctype.indexOf('application/json')>=0){
+      var json=await res.json();
+      var content=json&&json.choices&&json.choices[0]&&((json.choices[0].message&&json.choices[0].message.content)||(json.choices[0].delta&&json.choices[0].delta.content));
+      if(content)fullText=content;
+      else if(json&&json.error)throw new Error(json.error.message||'Ошибка API');
+    }else{
+      var reader=res.body?res.body.getReader():null;
+      if(!reader)throw new Error('Сервер не вернул поток данных');
+      var decoder=new TextDecoder();
+      var buffer='';
+      node.innerHTML='';
+      for(;;){
+        var chunk=await reader.read();
+        if(chunk.done)break;
+        armIdle();
+        buffer+=decoder.decode(chunk.value,{stream:true});
+        var nl;
+        while((nl=buffer.indexOf('\n'))>=0){
+          consumeLine(buffer.slice(0,nl));
+          buffer=buffer.slice(nl+1);
+        }
+      }
+      if(buffer.trim())consumeLine(buffer);
+    }
+
+    if(!fullText){
+      node.className='ai-error';
+      node.innerHTML='<strong>Модель вернула пустой ответ.</strong><br>Проверьте название модели и ключ в ⚙ API Keys.';
+      return;
+    }
+
+    node.className='ai-msg ai-msg-assistant';
+    node.innerHTML=formatMarkdown(fullText);
+    chatHistory.push({role:'user',content:query});
+    chatHistory.push({role:'assistant',content:fullText});
+    if(usedModel&&usedModel!==cfg.model)appendNotice('Ответила модель: '+usedModel+' (fallback)');
+  }catch(err){
+    var msg=err&&err.message?err.message:String(err);
+    if(err&&err.name==='AbortError'){
+      msg='Модель не ответила за '+Math.round(IDLE_TIMEOUT/1000)+' секунд. Попробуйте другую модель или повторите запрос.';
+    }else if(/Failed to fetch|NetworkError|Load failed/i.test(msg)){
+msg='Сервер /api/chat недоступен. Откройте сайт по адресу развёртывания (например https://your-app.onrender.com), а не как файл с диска.';
+    }
+    node.className='ai-error';
+    node.innerHTML='<strong>Не удалось получить ответ.</strong><br>'+escapeHtml(msg)+'<br><span style="opacity:.8">Проверьте ключ и модель в ⚙ API Keys или повторите запрос.</span>';
+    scrollChat();
+  }finally{
+    if(idleTimer)clearTimeout(idleTimer);
+    state.busy=false;sendBtn.disabled=false;
+    if(!overlay.hidden)input.focus();
+  }
+}
+
+async function testConnection(){
+  var cfg=readConfig();
+  saveSettings();
+  testResult.hidden=false;
+  testResult.className='ai-test-result';
+  testResult.textContent='Проверяем подключение…';
+  testBtn.disabled=true;
+  var controller=new AbortController();
+  var timer=setTimeout(function(){try{controller.abort()}catch(e){}},25000);
+  try{
+    var res=await fetch('/api/chat',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        base_url:cfg.baseUrl,api_key:cfg.key,model:cfg.model,temperature:0,
+        messages:[{role:'user',content:'Ответь одним словом: OK'}],stream:false
+      }),
+      signal:controller.signal
+    });
+    var data=null;try{data=await res.json()}catch(err){}
+    if(!res.ok){
+      var detail=data&&data.detail?data.detail:('HTTP '+res.status);
+      throw new Error(typeof detail==='string'?detail:JSON.stringify(detail));
+    }
+    var content=data&&data.choices&&data.choices[0]&&data.choices[0].message&&data.choices[0].message.content;
+    if(!content)throw new Error('Пустой ответ от модели');
+    testResult.className='ai-test-result ok';
+    testResult.textContent='✅ Подключение работает'+(data.model?' · '+data.model:'');
+  }catch(err){
+    testResult.className='ai-test-result bad';
+    testResult.textContent='❌ '+(err.name==='AbortError'?'Превышено время ожидания (25 с).':(err.message||String(err)));
+  }finally{
+    clearTimeout(timer);testBtn.disabled=false;
+  }
+}
+
+function loadServerConfig(){
+  fetch('/api/ai/config',{headers:{'Accept':'application/json'}}).then(function(r){return r.ok?r.json():null;}).then(function(c){
+    if(!c)return;
+    state.serverLoaded=true;
+    state.serverKey=!!c.server_key;
+    state.serverModel=c.model||'';
+    state.serverBase=c.base_url||'';
+    state.fallbacks=c.fallback_models||[];
+    if(!readStore().model&&c.model)modelEl.value=c.model;
+    updateServerHint();
+  }).catch(function(){state.serverLoaded=true;updateServerHint();});
+}
+
+launcher.addEventListener('click',openPanel);
+if(sideOpen)sideOpen.addEventListener('click',openPanel);
+closeBtn.addEventListener('click',closePanel);
+overlay.addEventListener('click',function(e){if(e.target===overlay)closePanel();});
+overlay.addEventListener('keydown',function(e){
+  if(e.key==='Escape'){
+    if(!configBox.hidden){configBox.hidden=true;configToggle.setAttribute('aria-expanded','false');configToggle.focus();}
+    else closePanel();
+    e.preventDefault();
+    return;
+  }
+  if(e.key!=='Tab')return;
+  var nodes=overlay.querySelectorAll('button,[href],input,select,textarea,[tabindex]:not([tabindex="-1"])');
+  var visible=[];
+  Array.prototype.forEach.call(nodes,function(n){if(!n.disabled&&n.getClientRects().length)visible.push(n);});
+  if(!visible.length)return;
+  var first=visible[0],last=visible[visible.length-1];
+  if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus();}
+  else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus();}
+});
+resetBtn.addEventListener('click',function(){chatHistory=[];seedWelcome();appendNotice('Диалог очищен · '+PERSONA_NAMES[currentPersona]);input.focus();});
+configToggle.addEventListener('click',function(){
+  var open=configBox.hidden;
+  configBox.hidden=!open;
+  configToggle.setAttribute('aria-expanded',open?'true':'false');
+  if(open)baseUrlEl.focus();
+});
+saveBtn.addEventListener('click',function(){
+  saveSettings();configBox.hidden=true;configToggle.setAttribute('aria-expanded','false');
+  appendNotice('Настройки сохранены');input.focus();
+});
+testBtn.addEventListener('click',testConnection);
+tempEl.addEventListener('input',function(){tempVal.textContent=tempEl.value;});
+Array.prototype.forEach.call(document.querySelectorAll('.ai-persona'),function(b){
+  b.addEventListener('click',function(){setPersona(b.getAttribute('data-persona'));});
+});
+Array.prototype.forEach.call(document.querySelectorAll('#ai-config [data-preset]'),function(b){
+  b.addEventListener('click',function(){
+    var p=PRESETS[b.getAttribute('data-preset')];
+    if(!p)return;
+    baseUrlEl.value=p.url;modelEl.value=p.model;saveSettings();updateServerHint();
+    appendNotice('Провайдер: '+b.textContent.trim()+' · '+p.model);
+  });
+});
+Array.prototype.forEach.call(document.querySelectorAll('.ai-quick [data-quick]'),function(b){
+  b.addEventListener('click',function(){
+    input.value=b.getAttribute('data-quick');
+    if(form.requestSubmit)form.requestSubmit();else form.dispatchEvent(new Event('submit',{cancelable:true}));
+  });
+});
+form.addEventListener('submit',handleSubmit);
+
+loadSettings();
+seedWelcome();
+loadServerConfig();
+if(location.hash==='#assistant')openPanel();
+})();
+</script>
+</body>
+</html>

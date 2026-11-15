@@ -1,0 +1,24 @@
+# Secrets — never commit real values. Copy .env.example to smap.env (or set
+# these in the Render dashboard) and fill in your own.
+.env
+*.env
+smap.env
+!.env.example
+
+# Runtime data (SQLite database, SMAP cache, uploaded videos)
+data/
+uploads/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+
+# OS / editor junk
+.DS_Store
+*.bak*
+.vscode/
+.idea/
